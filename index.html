@@ -415,6 +415,20 @@ html.rotated .dhead,html.rotated .dtools{padding-left:10px;padding-right:10px}
 .avcard{width:70px;height:98px;border-radius:12px;display:grid;place-items:center;font-size:20px;font-weight:900;animation:flipin .3s}
 .avcard.ok{background:#1fb867;color:#04210f}.avcard.ng{background:#e23b4e;color:#fff}
 .pbtn.avoff{opacity:.45}
+
+/* ---------- v5: 單人挑戰電腦 ---------- */
+.vsopts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.vsopt{appearance:none;border:0;background:var(--card);color:var(--fg);border-radius:20px;padding:18px 12px;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:150px;justify-content:center;box-shadow:inset 0 0 0 3px transparent}
+.vsopt .vi{font-size:46px;line-height:1.1}
+.vsopt b{font-size:19px}
+.vsopt span{font-size:13px;color:var(--muted)}
+.vsopt.on{box-shadow:inset 0 0 0 3px var(--accent);background:var(--card2)}
+.vsai .dinfo.rot,.vsai .dov .half.rot,.vsai .zone.rot{transform:none}
+.zone.aizone{pointer-events:none}
+.zone.aizone *{pointer-events:none}
+.aithink{display:inline-block;font-size:13px;font-weight:800;color:var(--muted);animation:fadein .6s ease infinite alternate}
+.aizone button{opacity:.4}
+.aizone .qopt.right{opacity:1}
 </style>
 </head><body>
 <div id="app"></div>
@@ -808,6 +822,7 @@ function duelOverlay(results, buttons) {
   let closed = false;
   const close = () => { if (!closed) { closed = true; ov.remove(); } };
   buttons = buttons.concat([{ text: '離開', cls: 'ghost', onClick: () => goList(App.mode) }]);
+  if (vsAI()) results = [results[0], { big: '🤖', sub: '電腦．難度' + AI.LV_NAME[aiLv()], color: '#fff' }];
   ov.append(mk(results[1], true), h('div', { class: 'mid' }, buttons.map(b => h('button', { class: 'btn ' + (b.cls || ''), onClick: () => { close(); b.onClick && b.onClick(); } }, b.text))), mk(results[0], false));
   App.el.append(ov);
   return { close };
@@ -949,7 +964,35 @@ const Roster = {
 };
 Roster.load();
 /* 兩人對戰時使用名單前兩位的名字 */
-function duo() { return [{ name: Roster.name(0) || '玩家 1', color: '#ff5a6e', idx: 0 }, { name: Roster.name(1) || '玩家 2', color: '#3fa7ff', idx: 1 }]; }
+function duo() {
+  if (vsAI()) return [humanPlayer('#ff5a6e'), aiPlayer('#3fa7ff')];
+  return [{ name: Roster.name(0) || '玩家 1', color: '#ff5a6e', idx: 0 }, { name: Roster.name(1) || '玩家 2', color: '#3fa7ff', idx: 1 }];
+}
+/* ================= 單人挑戰電腦 ================= */
+const AI_NAME = '🤖電腦';
+const vsAI = () => !!(App.vs && App.vs.ai);
+const aiLv = () => (App.vs && App.vs.lv) || 'mid';
+function humanPlayer(color) { return { name: Roster.name(0) || '你', color: color || Roster.color(0), idx: 0 }; }
+function aiPlayer(color) { return { name: AI_NAME, color: color || '#9aa3c7', idx: 1, ai: true, lv: aiLv() }; }
+function vsChooser(g, body, go) {
+  const saved = store.get('vs_' + g.id, { ai: false, lv: 'mid' });
+  let ai = !!saved.ai, lv = ['easy', 'mid', 'hard'].includes(saved.lv) ? saved.lv : 'mid';
+  const many = g.max > 2;
+  const pg = h('div', { class: 'pane scroll' });
+  body.replaceChildren(pg);
+  const render = () => {
+    pg.replaceChildren(h('div', { class: 'wrapw' },
+      h('div', { class: 'center', style: { paddingTop: '6px' } }, h('div', { style: { fontSize: '52px', lineHeight: '1.1' } }, g.icon), h('h2', { class: 'h' }, g.name), h('div', { class: 'muted', style: { fontSize: '14px' } }, g.desc)),
+      h('div', { class: 'vsopts' },
+        h('button', { class: 'vsopt' + (!ai ? ' on' : ''), onClick: () => { ai = false; Sfx.play('tap'); render(); } }, h('div', { class: 'vi' }, '👥'), h('b', null, many ? '多人對戰' : '雙人對戰'), h('span', null, many ? '朋友一起玩' : '兩人面對面')),
+        h('button', { class: 'vsopt' + (ai ? ' on' : ''), onClick: () => { ai = true; Sfx.play('tap'); render(); } }, h('div', { class: 'vi' }, '🤖'), h('b', null, '單人挑戰'), h('span', null, '和電腦比賽'))),
+      ai ? (g.ai === 'luck'
+        ? h('div', { class: 'tip center' }, '這個遊戲靠運氣，電腦沒有難度之分 🍀')
+        : h('div', { class: 'panel opt' }, h('div', { class: 'ol' }, '電腦難度'), seg([['easy', '🟢 低'], ['mid', '🟡 中'], ['hard', '🔴 高']], lv, v => { lv = v; }))) : null,
+      h('button', { class: 'btn big primary block', onClick: () => { store.set('vs_' + g.id, { ai, lv }); Sfx.play('ok'); go(ai ? { ai: true, lv: g.ai === 'luck' ? 'mid' : lv } : null); } }, ai ? '開始挑戰' : '下一步')));
+  };
+  render();
+}
 function rosterManager(onDone) {
   const body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
   const m = modal({ title: '👥 玩家名單', body, buttons: [{ text: '完成', cls: 'primary' }], onClose: () => onDone && onDone() });
@@ -986,7 +1029,7 @@ const Night = {
   data: null,
   load() { const d = store.get('night', null); this.data = d && d.stats ? d : { start: Date.now(), stats: {} }; if (!Array.isArray(this.data.log)) this.data.log = []; },
   save() { store.set('night', this.data); },
-  valid(nm) { return nm && !/^(紅方|藍方|黃方|綠方|玩家 ?\d+\d*)$/.test(nm); },
+  valid(nm) { return nm && nm !== AI_NAME && !/^(紅方|藍方|黃方|綠方|玩家 ?\d+\d*)$/.test(nm); },
   st(nm) { return this.data.stats[nm] || (this.data.stats[nm] = { win: 0, lose: 0, drink: 0, games: 0 }); },
   /* players: 參與者；win/lose: 玩家物件或名字陣列；drink: {名字: 口數} */
   record(players, { win = [], lose = [], drink = {} } = {}) {
@@ -1025,6 +1068,7 @@ function recordScores(P, sc, o, drinkN = 1) {
 const MODE_RANGE = { '2': [2, 2], '34': [3, 4], 'many': [5, 99], 'all': [1, 99] };
 function playerSetup(ctx, el, api, cfg) {
   const g = api.game;
+  if (vsAI()) cfg = Object.assign({}, cfg, { min: 2, max: 2, aiMode: true });
   const [mlo, mhi] = MODE_RANGE[api.mode] || [cfg.min, cfg.max];
   let saved = store.get('cnt_' + g.id, null);
   let n;
@@ -1064,7 +1108,14 @@ function playerSetup(ctx, el, api, cfg) {
           h('button', { class: 'iconbtn', 'aria-label': '增加人數', disabled: n >= cfg.max ? true : null, onClick: () => { if (n < cfg.max) { n++; Sfx.play('tap'); render(); } } }, '+')),
         h('div', { class: 'center muted', style: { fontSize: '13px', marginTop: '6px' } }, `可 ${cfg.min}～${cfg.max} 人`)));
     }
-    if (cfg.names !== false) {
+    if (cfg.aiMode) {
+      const inp = h('input', { id: 'pn0', type: 'text', maxlength: '8', placeholder: '你', value: Roster.name(0), autocomplete: 'off' });
+      inp.addEventListener('input', () => Roster.setName(0, inp.value));
+      inner.append(h('div', { class: 'panel', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+        h('h3', { class: 'h' }, '對戰'),
+        h('div', { class: 'names' }, h('label', { class: 'nameinp' }, h('span', { class: 'dot', style: { background: Roster.color(0) } }), inp),
+          h('div', { class: 'nameinp' }, h('span', null, '🤖'), h('b', { style: { padding: '6px 0' } }, '電腦．' + (g.ai === 'luck' ? '運氣' : '難度' + AI.LV_NAME[aiLv()]))))));
+    } else if (cfg.names !== false) {
       const grid = h('div', { class: 'names' });
       for (let i = 0; i < n; i++) {
         const inp = h('input', { id: 'pn' + i, type: 'text', maxlength: '8', placeholder: '玩家' + (i + 1), value: Roster.name(i), enterkeyhint: 'next', autocomplete: 'off' });
@@ -1099,6 +1150,7 @@ function playerSetup(ctx, el, api, cfg) {
     store.set('opt_' + g.id, opts);
     const used = {};
     const players = [];
+    if (cfg.aiMode) { Sfx.play('ok'); cfg.onStart([humanPlayer(pcolor(0)), aiPlayer(pcolor(1))], Object.assign({}, opts)); return; }
     for (let i = 0; i < n; i++) {
       let nm, col;
       if (cfg.names === false) { nm = Roster.name(i) || (n <= 4 ? COLOR_NAMES[i] : '玩家' + (i + 1)); col = pcolor(i); }
@@ -1123,6 +1175,7 @@ function gamesFor(mode) {
 function show(node) { App.el.replaceChildren(node); }
 function endGame() {
   if (App.gctx) { App.gctx.destroy(); App.gctx = null; }
+  App.vs = null; if (App.el) App.el.classList.remove('vsai');
   App.game = null;
   releaseWake();
 }
@@ -1265,7 +1318,7 @@ function goList(mode) { endGame(); App.mode = mode; show(listScreen(mode)); }
 function showRules(g, after) {
   const was = App.gctx ? App.gctx.paused : false;
   if (App.gctx) App.gctx.paused = true;
-  modal({ title: g.name + '．玩法', body: g.rules, dismissable: true, buttons: [{ text: '知道了', cls: 'primary' }], onClose: () => { if (after) after(); else if (App.gctx) App.gctx.paused = was; } });
+  modal({ title: g.name + '．玩法', body: g.rules + (g.ai ? (g.ai === 'luck' ? '<p>🤖 在「雙人對決」清單裡也可以選「單人挑戰」，和電腦輪流玩。</p>' : '<p>🤖 在「雙人對決」清單裡可以選「單人挑戰」和電腦比賽，難度有低、中、高三種。</p>') : ''), dismissable: true, buttons: [{ text: '知道了', cls: 'primary' }], onClose: () => { if (after) after(); else if (App.gctx) App.gctx.paused = was; } });
 }
 function pauseMenu(g, api) {
   if (!App.gctx) return;
@@ -1315,6 +1368,16 @@ function openGame(g, mode) {
     api.setTitle(g.name);
     const ctx = new Ctx();
     App.gctx = ctx;
+    const go = vs => {
+      if (!ctx.alive) return;
+      App.vs = vs; scr.classList.toggle('vsai', !!vs); App.el.classList.toggle('vsai', !!(vs && vs.ai));
+      if (vs && vs.ai) api.setTitle(g.name + (g.ai === 'luck' ? '．對電腦' : '．電腦' + AI.LV_NAME[vs.lv]));
+      body.replaceChildren();
+      try { g.start(ctx, body, api); }
+      catch (e) { console.error(e); body.replaceChildren(h('div', { class: 'pass' }, h('div', null, '發生錯誤：' + e.message), h('button', { class: 'btn', onClick: () => api.exit() }, '返回'))); }
+    };
+    App.vs = null; scr.classList.remove('vsai'); App.el.classList.remove('vsai');
+    if (g.ai && (App.mode === '2' || App.mode === 'all')) { vsChooser(g, body, go); return; }
     try { g.start(ctx, body, api); }
     catch (e) { console.error(e); body.replaceChildren(h('div', { class: 'pass' }, h('div', null, '發生錯誤：' + e.message), h('button', { class: 'btn', onClick: () => api.exit() }, '返回'))); }
   }
@@ -1461,6 +1524,346 @@ function localXY(e, el) {
 }
 
 ;
+/* ================= 電腦對手（AI） ================= */
+/* 難度：easy 低、mid 中、hard 高。每個函式只看得到玩家看得到的資訊，不作弊。 */
+const AI = {};
+const chance = p => Math.random() < p;
+const pickBest = (list, key) => { let best = -Infinity, out = []; for (const it of list) { const v = key(it); if (v > best + 1e-9) { best = v; out = [it]; } else if (Math.abs(v - best) <= 1e-9) out.push(it); } return pick(out); };
+
+/* ---------- 圈圈叉叉：b[i] = -1 空、0/1 玩家 ---------- */
+AI.ttt = function (b, me, lv) {
+  const empty = b.map((v, i) => v < 0 ? i : -1).filter(i => i >= 0);
+  const winAt = (p) => empty.find(i => { b[i] = p; const w = tttWinner(b); b[i] = -1; return w && w.p === p; });
+  if (lv === 'easy') {
+    if (chance(.5)) { const w = winAt(me); if (w !== undefined) return w; }
+    return pick(empty);
+  }
+  if (lv === 'mid') {
+    const w = winAt(me); if (w !== undefined) return w;
+    const bl = winAt(1 - me); if (bl !== undefined && chance(.85)) return bl;
+    if (chance(.25)) return pick(empty);
+    if (b[4] < 0) return 4;
+    const corners = [0, 2, 6, 8].filter(i => b[i] < 0);
+    return corners.length ? pick(corners) : pick(empty);
+  }
+  // hard：完整 minimax，同分時隨機
+  const memo = new Map();
+  function mm(turn) {
+    const key = b.join() + turn;
+    if (memo.has(key)) return memo.get(key);
+    const w = tttWinner(b);
+    let v;
+    if (w) v = w.p === me ? 10 : w.p < 0 ? 0 : -10;
+    else {
+      v = turn === me ? -99 : 99;
+      for (let i = 0; i < 9; i++) if (b[i] < 0) {
+        b[i] = turn; const s = mm(1 - turn) * .99; b[i] = -1;
+        v = turn === me ? Math.max(v, s) : Math.min(v, s);
+      }
+    }
+    memo.set(key, v); return v;
+  }
+  return pickBest(empty, i => { b[i] = me; const s = mm(1 - me); b[i] = -1; return s; });
+};
+
+/* ---------- 四子棋：g[r][c]，回傳欄位 ---------- */
+AI.c4 = function (g, me, lv) {
+  const R = g.length, C = g[0].length;
+  const cols = [...Array(C).keys()].filter(c => g[0][c] < 0);
+  const rowOf = c => { for (let r = R - 1; r >= 0; r--) if (g[r][c] < 0) return r; return -1; };
+  const wins = (c, p) => { const r = rowOf(c); if (r < 0) return false; g[r][c] = p; const w = c4Win(g, r, c, p, R, C); g[r][c] = -1; return !!w; };
+  const winNow = cols.find(c => wins(c, me));
+  const blockNow = cols.find(c => wins(c, 1 - me));
+  if (lv === 'easy') {
+    if (winNow !== undefined && chance(.6)) return winNow;
+    if (blockNow !== undefined && chance(.35)) return blockNow;
+    return pick(cols);
+  }
+  if (winNow !== undefined) return winNow;
+  if (blockNow !== undefined && (lv === 'hard' || chance(.9))) return blockNow;
+  const order = [3, 2, 4, 1, 5, 0, 6].filter(c => c < C);
+  function evalWin(cells) {
+    let m = 0, o = 0;
+    for (const v of cells) { if (v === me) m++; else if (v === 1 - me) o++; }
+    if (m && o) return 0;
+    if (m === 3) return 50; if (m === 2) return 8; if (o === 3) return -60; if (o === 2) return -8;
+    return 0;
+  }
+  function score() {
+    let s = 0;
+    for (let r = 0; r < R; r++) if (g[r][3] === me) s += 4; else if (g[r][3] === 1 - me) s -= 4;
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]]) {
+      const er = r + dr * 3, ec = c + dc * 3;
+      if (er < 0 || er >= R || ec < 0 || ec >= C) continue;
+      s += evalWin([g[r][c], g[r + dr][c + dc], g[r + dr * 2][c + dc * 2], g[er][ec]]);
+    }
+    return s;
+  }
+  let nodes = 0;
+  function negamax(depth, alpha, beta, p) {
+    nodes++;
+    const avail = order.filter(c => g[0][c] < 0);
+    if (!avail.length) return 0;
+    for (const c of avail) if (wins(c, p)) return 100000 + depth;
+    if (depth === 0) return (p === me ? 1 : -1) * score();
+    let best = -Infinity;
+    for (const c of avail) {
+      const r = rowOf(c); g[r][c] = p;
+      const v = -negamax(depth - 1, -beta, -alpha, 1 - p);
+      g[r][c] = -1;
+      if (v > best) best = v;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+  const depth = lv === 'hard' ? 6 : 2;
+  if (lv === 'mid' && chance(.15)) return pick(cols);
+  return pickBest(order.filter(c => g[0][c] < 0), c => {
+    const r = rowOf(c); g[r][c] = me;
+    const v = -negamax(depth - 1, -Infinity, Infinity, 1 - me);
+    g[r][c] = -1; return v;
+  });
+};
+
+/* ---------- 五子棋：回傳 [r, c] ---------- */
+AI.gomoku = function (g, me, lv, N) {
+  const opp = 1 - me;
+  let any = false;
+  for (let r = 0; r < N && !any; r++) for (let c = 0; c < N; c++) if (g[r][c] >= 0) { any = true; break; }
+  if (!any) { const m = N >> 1; return lv === 'easy' ? [m + randInt(-2, 2), m + randInt(-2, 2)] : [m, m]; }
+  const W = [0, 1, 12, 220, 6000, 1e7]; // 放下後一個五格窗口內的子數 → 分數
+  const D = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  function cellScore(r, c, p) {
+    let s = 0, fours = 0, threes = 0;
+    for (const [dr, dc] of D) {
+      for (let k = -4; k <= 0; k++) {
+        let cnt = 0, ok = true;
+        for (let t = 0; t < 5; t++) {
+          const rr = r + dr * (k + t), cc = c + dc * (k + t);
+          if (rr < 0 || rr >= N || cc < 0 || cc >= N) { ok = false; break; }
+          const v = (rr === r && cc === c) ? p : g[rr][cc];
+          if (v === p) cnt++; else if (v >= 0) { ok = false; break; }
+        }
+        if (ok) { s += W[cnt]; if (cnt === 4) fours++; if (cnt === 3) threes++; }
+      }
+    }
+    if (fours >= 2) s += 50000; // 活四或雙四
+    if (fours && threes >= 2) s += 20000;
+    return s;
+  }
+  const cands = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (g[r][c] >= 0) continue;
+    let near = false;
+    for (let dr = -2; dr <= 2 && !near; dr++) for (let dc = -2; dc <= 2; dc++) { const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < N && cc >= 0 && cc < N && g[rr][cc] >= 0) { near = true; break; } }
+    if (near) cands.push([r, c]);
+  }
+  const atkW = lv === 'easy' ? 1 : lv === 'mid' ? 1 : 1.05, defW = lv === 'easy' ? .35 : lv === 'mid' ? .8 : .95;
+  const scored = cands.map(([r, c]) => ({ r, c, a: cellScore(r, c, me), d: cellScore(r, c, opp) }));
+  scored.forEach(x => x.v = x.a * atkW + x.d * defW);
+  scored.sort((x, y) => y.v - x.v);
+  const win = scored.find(x => x.a >= 1e7); if (win && (lv !== 'easy' || chance(.7))) return [win.r, win.c];
+  if (lv === 'easy') { const top = scored.slice(0, 6); return (({ r, c }) => [r, c])(pick(top)); }
+  if (lv === 'mid') { const top = scored.slice(0, chance(.7) ? 1 : 3); return (({ r, c }) => [r, c])(pick(top)); }
+  // hard：前幾名候選再看對手最好的回應
+  const top = scored.slice(0, 10);
+  let best = null, bv = -Infinity;
+  for (const x of top) {
+    g[x.r][x.c] = me;
+    let reply = 0;
+    for (const y of scored.slice(0, 24)) { if (g[y.r][y.c] >= 0) continue; const s = cellScore(y.r, y.c, opp); if (s > reply) reply = s; }
+    g[x.r][x.c] = -1;
+    const v = x.v - reply * .6 + Math.random();
+    if (v > bv) { bv = v; best = x; }
+  }
+  return [best.r, best.c];
+};
+
+/* ---------- 黑白棋：回傳 [r, c] 或 null ---------- */
+const RV_W = [
+  [100, -20, 10, 5, 5, 10, -20, 100], [-20, -50, -2, -2, -2, -2, -50, -20], [10, -2, 1, 1, 1, 1, -2, 10], [5, -2, 1, 0, 0, 1, -2, 5],
+  [5, -2, 1, 0, 0, 1, -2, 5], [10, -2, 1, 1, 1, 1, -2, 10], [-20, -50, -2, -2, -2, -2, -50, -20], [100, -20, 10, 5, 5, 10, -20, 100]];
+AI.reversi = function (g, me, lv) {
+  const moves = rvMoves(g, me);
+  if (!moves.length) return null;
+  if (lv === 'easy') return chance(.75) ? pick(moves) : pickBest(moves, ([r, c]) => rvFlips(g, r, c, me).length);
+  const apply = (r, c, p) => { const f = rvFlips(g, r, c, p); g[r][c] = p; f.forEach(([a, b]) => g[a][b] = p); return f; };
+  const undo = (r, c, f, p) => { g[r][c] = -1; f.forEach(([a, b]) => g[a][b] = 1 - p); };
+  const evalB = () => {
+    let s = 0, cnt = 0;
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { if (g[r][c] === me) { s += RV_W[r][c]; cnt++; } else if (g[r][c] === 1 - me) { s -= RV_W[r][c]; cnt++; } }
+    const mob = rvMoves(g, me).length - rvMoves(g, 1 - me).length;
+    return s + mob * (cnt > 52 ? 1 : 6);
+  };
+  if (lv === 'mid') {
+    if (chance(.15)) return pick(moves);
+    return pickBest(moves, ([r, c]) => { const f = apply(r, c, me); const v = evalB(); undo(r, c, f, me); return v; });
+  }
+  function ab(depth, alpha, beta, p) {
+    const ms = rvMoves(g, p);
+    if (depth === 0) return evalB();
+    if (!ms.length) {
+      if (!rvMoves(g, 1 - p).length) { let d = 0; for (const row of g) for (const v of row) { if (v === me) d++; else if (v === 1 - me) d--; } return d * 1000; }
+      return ab(depth - 1, alpha, beta, 1 - p);
+    }
+    if (p === me) {
+      let v = -Infinity;
+      for (const [r, c] of ms) { const f = apply(r, c, p); v = Math.max(v, ab(depth - 1, alpha, beta, 1 - p)); undo(r, c, f, p); alpha = Math.max(alpha, v); if (alpha >= beta) break; }
+      return v;
+    } else {
+      let v = Infinity;
+      for (const [r, c] of ms) { const f = apply(r, c, p); v = Math.min(v, ab(depth - 1, alpha, beta, 1 - p)); undo(r, c, f, p); beta = Math.min(beta, v); if (alpha >= beta) break; }
+      return v;
+    }
+  }
+  return pickBest(moves, ([r, c]) => { const f = apply(r, c, me); const v = ab(3, -Infinity, Infinity, 1 - me); undo(r, c, f, me); return v; });
+};
+
+/* ---------- 暗棋：回傳 {type:'flip', i} 或 {type:'move', from, to} ---------- */
+const DC_VAL = { K: 7, A: 5, E: 4, R: 3, H: 2.5, C: 3.5, S: 1.5 };
+AI.darkchess = function (B, myCol, lv) {
+  const downs = B.map((p, i) => p && !p.up ? i : -1).filter(i => i >= 0);
+  if (!myCol) return { type: 'flip', i: pick(downs) };
+  const opCol = myCol === 'r' ? 'b' : 'r';
+  const acts = [];
+  B.forEach((p, i) => { if (p && p.up && p.c === myCol) dcMoves(B, i).forEach(m => acts.push({ type: 'move', from: i, to: m.i, cap: m.cap })); });
+  /* 某格的棋會不會被對方吃 */
+  const threatened = (bd, i) => bd.some((p, j) => p && p.up && p.c === opCol && dcMoves(bd, j).some(m => m.i === i && m.cap));
+  const sim = a => { const bd = B.slice(); bd[a.to] = bd[a.from]; bd[a.from] = null; return bd; };
+  if (lv === 'easy') {
+    const caps = acts.filter(a => a.cap);
+    if (caps.length && chance(.6)) return pick(caps);
+    if (downs.length && (chance(.6) || !acts.length)) return { type: 'flip', i: pick(downs) };
+    return acts.length ? pick(acts) : { type: 'flip', i: pick(downs) };
+  }
+  const score = a => {
+    if (a.type === 'flip') return .2;
+    let v = 0;
+    if (a.cap) v += DC_VAL[B[a.to].t] * 10;
+    const before = threatened(B, a.from), bd = sim(a), after = threatened(bd, a.to);
+    if (before && !after) v += DC_VAL[B[a.from].t] * 8; // 逃走
+    if (after) v -= DC_VAL[B[a.from].t] * (lv === 'hard' ? 9 : 6);
+    if (lv === 'hard') {
+      // 移動後其他棋子是否因此暴露
+      let exposed = 0; bd.forEach((p, j) => { if (p && p.up && p.c === myCol && j !== a.to && threatened(bd, j) && !threatened(B, j)) exposed += DC_VAL[p.t]; });
+      v -= exposed * 7;
+      // 靠近可吃的目標
+      if (!a.cap) bd.forEach((p, j) => { if (p && p.up && p.c === opCol && dcMoves(bd, a.to).some(m => m.i === j && m.cap)) v += DC_VAL[p.t] * 1.5; });
+    }
+    return v - .1 + Math.random() * .05;
+  };
+  const opts = acts.map(a => ({ a, v: score(a) }));
+  if (downs.length) {
+    // 翻棋：避開會讓自己暴露的位置（高難度），沒有好的行動就翻
+    const safeFlip = lv === 'hard' ? downs.filter(i => ![1, -1, 4, -4].some(d => { const j = i + d; if (j < 0 || j >= 32 || (Math.abs(d) === 1 && Math.floor(j / 4) !== Math.floor(i / 4))) return false; const p = B[j]; return p && p.up && p.c === myCol && DC_VAL[p.t] >= 4; })) : downs;
+    opts.push({ a: { type: 'flip', i: pick(safeFlip.length ? safeFlip : downs) }, v: lv === 'hard' ? 1 : .5 });
+  }
+  if (!opts.length) return null;
+  opts.sort((x, y) => y.v - x.v);
+  if (lv === 'mid' && chance(.15)) return pick(opts).a;
+  return opts[0].a;
+};
+
+/* ---------- 海戰棋：shots[r][c] 0 未射 1 落空 2 命中；sunkCells：已擊沉的格子集合 'r,c'；remaining：尚未擊沉的船長度 ---------- */
+AI.battleship = function (shots, lv, sunkCells, remaining) {
+  const N = shots.length, free = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (!shots[r][c]) free.push([r, c]);
+  if (lv === 'easy') return pick(free);
+  const hits = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (shots[r][c] === 2 && !sunkCells.has(r + ',' + c)) hits.push([r, c]);
+  if (lv === 'mid') {
+    if (hits.length) {
+      const adj = [];
+      for (const [r, c] of hits) for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < N && cc >= 0 && cc < N && !shots[rr][cc]) adj.push([rr, cc]); }
+      if (adj.length) return pick(adj);
+    }
+    const par = free.filter(([r, c]) => (r + c) % 2 === 0);
+    return pick(par.length ? par : free);
+  }
+  // hard：機率密度
+  const P = Array.from({ length: N }, () => Array(N).fill(0));
+  for (const len of remaining) for (const v of [0, 1]) for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    let ok = true, hc = 0;
+    for (let k = 0; k < len; k++) {
+      const rr = r + (v ? k : 0), cc = c + (v ? 0 : k);
+      if (rr >= N || cc >= N || shots[rr][cc] === 1 || sunkCells.has(rr + ',' + cc)) { ok = false; break; }
+      if (shots[rr][cc] === 2) hc++;
+    }
+    if (!ok) continue;
+    const w = hits.length ? (hc ? 1 + hc * 40 : 0.05) : 1;
+    for (let k = 0; k < len; k++) { const rr = r + (v ? k : 0), cc = c + (v ? 0 : k); if (!shots[rr][cc]) P[rr][cc] += w; }
+  }
+  return pickBest(free, ([r, c]) => P[r][c]);
+};
+
+/* ---------- 點格棋：lines = [{t,r,c}] 尚未畫的線；sides(t,r,c,add) 計算畫線後相鄰格子的邊數 ---------- */
+AI.dots = function (S, hl, vl, lv) {
+  const free = [];
+  for (let r = 0; r <= S; r++) for (let c = 0; c < S; c++) if (hl[r][c] < 0) free.push({ t: 'h', r, c });
+  for (let r = 0; r < S; r++) for (let c = 0; c <= S; c++) if (vl[r][c] < 0) free.push({ t: 'v', r, c });
+  const sideCount = (r, c) => (hl[r][c] >= 0) + (hl[r + 1][c] >= 0) + (vl[r][c] >= 0) + (vl[r][c + 1] >= 0);
+  const boxesOf = l => l.t === 'h' ? [[l.r - 1, l.c], [l.r, l.c]] : [[l.r, l.c - 1], [l.r, l.c]];
+  const inB = ([r, c]) => r >= 0 && r < S && c >= 0 && c < S;
+  const completes = l => boxesOf(l).filter(inB).filter(([r, c]) => sideCount(r, c) === 3).length;
+  const makes3 = l => boxesOf(l).filter(inB).some(([r, c]) => sideCount(r, c) === 2);
+  const setL = (l, v) => { (l.t === 'h' ? hl : vl)[l.r][l.c] = v; };
+  const caps = free.filter(completes);
+  if (lv === 'easy') {
+    if (caps.length && chance(.55)) return pick(caps);
+    const safe = free.filter(l => !makes3(l));
+    return pick(safe.length && chance(.5) ? safe : free);
+  }
+  const safe = free.filter(l => !completes(l) && !makes3(l));
+  // 送出最少格子的線（模擬對手貪婪吃完）
+  const giveaway = l => {
+    const changed = [l]; setL(l, 9);
+    let n = 0;
+    for (; ;) {
+      const fr = free.filter(x => (x.t === 'h' ? hl : vl)[x.r][x.c] < 0);
+      const cap = fr.find(completes);
+      if (!cap) break;
+      n += completes(cap); setL(cap, 9); changed.push(cap);
+    }
+    changed.forEach(x => setL(x, -1));
+    return n;
+  };
+  if (lv === 'mid') {
+    if (caps.length) return pick(caps);
+    if (safe.length) return pick(safe);
+    return chance(.5) ? pickBest(free, l => -giveaway(l)) : pick(free);
+  }
+  if (caps.length) {
+    // 高：若吃完後沒有安全線，且剩下的鏈很短，保留「雙交叉」讓對手接手（簡化：只在剩 2 格鏈時）
+    return pick(caps);
+  }
+  if (safe.length) return pick(safe);
+  return pickBest(free, l => -giveaway(l));
+};
+
+/* ---------- 翻牌記憶 ---------- */
+/* known: Map(index → 圖案)；回傳要翻的牌 */
+AI.memoryPick = function (deck, doneSet, known, firstIdx) {
+  const avail = deck.map((_, i) => i).filter(i => !doneSet.has(i) && i !== firstIdx);
+  if (firstIdx == null) {
+    const seen = {};
+    for (const [i, e] of known) { if (doneSet.has(i)) continue; if (seen[e] != null) return seen[e]; seen[e] = i; }
+    const unknown = avail.filter(i => !known.has(i));
+    return pick(unknown.length ? unknown : avail);
+  }
+  const e = deck[firstIdx];
+  for (const [i, v] of known) if (v === e && i !== firstIdx && !doneSet.has(i)) return i;
+  const unknown = avail.filter(i => !known.has(i));
+  return pick(unknown.length ? unknown : avail);
+};
+AI.memRemember = { easy: .3, mid: .65, hard: .95 };
+
+/* ---------- 共用：反應時間、正確率 ---------- */
+AI.react = { easy: [480, 700], mid: [320, 440], hard: [220, 290] };
+AI.rt = lv => randInt(...AI.react[lv]);
+AI.LV_NAME = { easy: '低', mid: '中', hard: '高' };
+
+;
 /* ================= 棋盤類 ================= */
 const DUO = [{ name: '玩家 1', color: '#ff5a6e', idx: 0 }, { name: '玩家 2', color: '#3fa7ff', idx: 1 }];
 const SVG_X = c => `<svg viewBox="0 0 100 100"><path d="M18 18L82 82M82 18L18 82" stroke="${c}" stroke-width="15" stroke-linecap="round" fill="none"/></svg>`;
@@ -1474,7 +1877,7 @@ function tttWinner(b) {
   return null;
 }
 defGame({
-  id: 'ttt', name: '圈圈叉叉', icon: '⭕', min: 2, max: 2, order: { '2': 1 },
+  id: 'ttt', name: '圈圈叉叉', icon: '⭕', min: 2, max: 2, ai: true, order: { '2': 1 },
   desc: '三個連成一線就贏，經典井字棋',
   rules: '<p>兩人輪流在九宮格放上 ✕ 或 ◯，先把自己的三個記號連成一直線（橫、直、斜）就獲勝。九格下滿仍沒人連線就是平手。</p><p>手機平放在兩人中間，下方玩家是 ✕，上方玩家是 ◯。每局由上一局的後手先下。</p>',
   start(ctx, el) {
@@ -1498,8 +1901,10 @@ defGame({
         for (let i = 0; i < 2; i++) L.set(i, { name: h('span', null, h('span', { html: i === 0 ? SVG_X(P[0].color) : SVG_O(P[1].color), style: { width: '28px', height: '28px', display: 'inline-block' } }), ' ' + P[i].name), sub: `勝 ${score[i]} · 平 ${score[2]}`, active: !over && turn === i });
       };
       upd();
-      function play(i) {
-        if (over || b[i] >= 0) return;
+      const aiGo = () => { if (!over && P[turn].ai) ctx.after(450, () => { if (!over && P[turn].ai) play(AI.ttt(b, turn, P[turn].lv), true); }); };
+      aiGo();
+      function play(i, fromAI) {
+        if (over || b[i] >= 0 || (P[turn].ai && !fromAI)) return;
         b[i] = turn;
         cells[i].innerHTML = turn === 0 ? SVG_X(P[0].color) : SVG_O(P[1].color);
         cells[i].firstChild.classList.add('mark-in');
@@ -1519,7 +1924,7 @@ defGame({
           });
           return;
         }
-        turn = 1 - turn; upd();
+        turn = 1 - turn; upd(); aiGo();
       }
     }
     round();
@@ -1540,7 +1945,7 @@ function c4Win(g, r, c, p, R = 6, C = 7) {
   return null;
 }
 defGame({
-  id: 'c4', name: '四子棋', icon: '🔴', min: 2, max: 2, order: { '2': 2 },
+  id: 'c4', name: '四子棋', icon: '🔴', min: 2, max: 2, ai: true, order: { '2': 2 },
   desc: '投下棋子，先連成四個就贏',
   rules: '<p>兩人輪流點選一欄投下棋子，棋子會落到該欄最下面的空位。先讓自己四顆棋子連成一直線（橫、直、斜）的人獲勝。棋盤放滿沒有人連線就平手。</p><p>下方玩家紅色、上方玩家藍色，每局輪流先手。</p>',
   start(ctx, el) {
@@ -1562,8 +1967,10 @@ defGame({
       fitBox(ctx, L.mid, box, 7 / 6.2);
       const upd = () => { for (let i = 0; i < 2; i++) L.set(i, { name: h('span', null, h('span', { style: { display: 'inline-block', width: '20px', height: '20px', borderRadius: '50%', background: P[i].color } }), ' ' + P[i].name), sub: `勝 ${score[i]} · 平 ${score[2]}`, active: !over && turn === i }); };
       upd();
-      function drop(c) {
-        if (over || busy) return;
+      const aiGo = () => { if (!over && P[turn].ai) ctx.after(500, () => { if (!over && !busy && P[turn].ai) drop(AI.c4(g, turn, P[turn].lv), true); }); };
+      aiGo();
+      function drop(c, fromAI) {
+        if (over || busy || (P[turn].ai && !fromAI)) return;
         let r = -1;
         for (let k = R - 1; k >= 0; k--) if (g[k][c] < 0) { r = k; break; }
         if (r < 0) { Sfx.play('bad'); return; }
@@ -1588,7 +1995,7 @@ defGame({
             });
             return;
           }
-          turn = 1 - turn; upd();
+          turn = 1 - turn; upd(); aiGo();
         });
       }
     }
@@ -1606,7 +2013,7 @@ function gomokuWin(g, r, c, p, N) {
   return null;
 }
 defGame({
-  id: 'gomoku', name: '五子棋', icon: '⚫', min: 2, max: 2, order: { '2': 3 },
+  id: 'gomoku', name: '五子棋', icon: '⚫', min: 2, max: 2, ai: true, order: { '2': 3 },
   desc: '黑白對弈，先連五子者勝',
   rules: '<p>15×15 棋盤，黑棋（下方玩家）先下，兩人輪流落子，先把五顆（或更多）同色棋子連成一直線就贏。</p><p><b>防誤觸：</b>點一下會出現半透明預覽，再點同一個位置才會真正落子；點別處可以改位置。</p><p>可以使用「悔棋」退回上一步。每局交換先手顏色。</p>',
   start(ctx, el) {
@@ -1656,13 +2063,23 @@ defGame({
         if (preview && !over) { stone(preview[0], preview[1], turn, .45); x.strokeStyle = P[turn].color; x.lineWidth = 2.5; x.beginPath(); x.arc(m + preview[1] * m, m + preview[0] * m, m * .5, 0, 7); x.stroke(); }
         if (winCells) { x.strokeStyle = '#ff3b4f'; x.lineWidth = 3; for (const [r, c] of winCells) { x.beginPath(); x.arc(m + c * m, m + r * m, m * .47, 0, 7); x.stroke(); } }
       }
+      let thinking = false;
+      const aiGo = () => {
+        if (over || !P[turn].ai) return;
+        thinking = true;
+        ctx.after(350, () => { if (over || !P[turn].ai) { thinking = false; return; } const [r, c] = AI.gomoku(g, turn, P[turn].lv, N); thinking = false; place(r, c); });
+      };
       ctx.on(cv, 'pointerdown', e => {
-        if (over) return;
+        if (over || P[turn].ai || thinking) return;
         const [px, py] = localXY(e, cv);
         const m = cv.clientWidth / (N + 1);
         const c = Math.round(px / m - 1), r = Math.round(py / m - 1);
         if (r < 0 || r >= N || c < 0 || c >= N || g[r][c] >= 0) return;
-        if (preview && preview[0] === r && preview[1] === c) {
+        if (preview && preview[0] === r && preview[1] === c) place(r, c);
+        else { preview = [r, c]; Sfx.play('tap'); draw(); }
+      });
+      function place(r, c) {
+        {
           g[r][c] = turn; hist.push([r, c, turn]); preview = null; Sfx.play('place');
           const w = gomokuWin(g, r, c, turn, N);
           if (w) {
@@ -1674,12 +2091,18 @@ defGame({
           }
           if (hist.length === N * N) { over = true; draw(); upd(); ctx.after(500, () => duelOverlay([{ big: '平手' }, { big: '平手' }], [{ text: '再來一局', cls: 'primary', onClick: () => { blackIs = 1 - blackIs; round(); } }])); return; }
           turn = 1 - turn; upd();
-        } else { preview = [r, c]; Sfx.play('tap'); }
-        draw();
-      });
+        }
+        draw(); aiGo();
+      }
+      aiGo();
       function undo() {
-        if (over || !hist.length) return;
-        const [r, c, p] = hist.pop(); g[r][c] = -1; turn = p; preview = null; Sfx.play('flip'); upd(); draw();
+        if (over || !hist.length || thinking) return;
+        if (vsAI()) {
+          // 退回到上一次輪到你的時候（同時收回電腦的那一步）
+          while (hist.length) { const [r, c, p] = hist.pop(); g[r][c] = -1; turn = p; if (!P[p].ai) break; }
+          if (P[turn].ai) { draw(); upd(); aiGo(); return; }
+        } else { const [r, c, p] = hist.pop(); g[r][c] = -1; turn = p; }
+        preview = null; Sfx.play('flip'); upd(); draw();
       }
     }
     round();
@@ -1700,7 +2123,7 @@ function rvFlips(g, r, c, p) {
 }
 function rvMoves(g, p) { const m = []; for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (g[r][c] < 0 && rvFlips(g, r, c, p).length) m.push([r, c]); return m; }
 defGame({
-  id: 'reversi', name: '黑白棋', icon: '⚪', min: 2, max: 2, order: { '2': 4 },
+  id: 'reversi', name: '黑白棋', icon: '⚪', min: 2, max: 2, ai: true, order: { '2': 4 },
   desc: '夾住對手翻成自己的顏色',
   rules: '<p>黑子先下。落子時必須「夾住」對方至少一顆棋子（橫、直、斜都算），被夾住的棋子全部翻成你的顏色。半透明圓點就是你可以下的位置。</p><p>如果輪到你卻沒有地方可下，會自動跳過。雙方都不能下時遊戲結束，棋子多的一方獲勝。</p>',
   start(ctx, el) {
@@ -1733,17 +2156,19 @@ defGame({
         for (let i = 0; i < 2; i++) L.set(i, { name: h('span', null, h('span', { style: { display: 'inline-block', width: '20px', height: '20px', borderRadius: '50%', background: col(i) === 'b' ? '#111' : '#f4f4f4', boxShadow: '0 0 0 2px ' + P[i].color } }), ' ' + P[i].name), sub: `${cnt[i]} 子 · 勝 ${score[i]}`, active: !over && turn === i });
       }
       render();
-      function play(r, c) {
-        if (over) return;
+      const aiGo = () => { if (!over && P[turn].ai) ctx.after(600, () => { if (over || !P[turn].ai) return; const m = AI.reversi(g, turn, P[turn].lv); if (m) play(m[0], m[1], true); }); };
+      aiGo();
+      function play(r, c, fromAI) {
+        if (over || (P[turn].ai && !fromAI)) return;
         const f = rvFlips(g, r, c, turn);
         if (!f.length) { if (g[r][c] < 0) Sfx.play('bad'); return; }
         g[r][c] = turn; for (const [a, b] of f) g[a][b] = turn;
         last = [r, c]; Sfx.play('place');
         const nxt = 1 - turn;
         if (rvMoves(g, nxt).length) turn = nxt;
-        else if (rvMoves(g, turn).length) { render(); toast(P[nxt].name + ' 無處可下，跳過'); return; }
+        else if (rvMoves(g, turn).length) { render(); toast(P[nxt].name + ' 無處可下，跳過'); aiGo(); return; }
         else { over = true; render(); finish(); return; }
-        render();
+        render(); aiGo();
       }
       function finish() {
         const cnt = count();
@@ -1788,7 +2213,7 @@ function bsRandom() {
   return null;
 }
 defGame({
-  id: 'battleship', name: '海戰棋', icon: '🚢', min: 2, max: 2, order: { '2': 9 },
+  id: 'battleship', name: '海戰棋', icon: '🚢', min: 2, max: 2, ai: true, order: { '2': 9 },
   desc: '藏好艦隊，輪流開砲擊沉對方',
   rules: '<p>每位玩家先在 8×8 海域擺放 5 艘船（長度 4、3、3、2、2），可以手動擺放或隨機擺放。擺放時不要讓對方看到。</p><p>之後輪流把手機交給對方，點選敵方海域開砲：<b>💥</b> 是命中、<b>·</b> 是落空。打中整艘船就會「擊沉」。先擊沉對方所有船艦的人獲勝。</p><p>每回合只能開一砲，開完砲請按「交給對手」。</p>',
   start(ctx, el, api) {
@@ -1808,7 +2233,7 @@ defGame({
       function place(pi) {
         const grid = Array.from({ length: BS_N }, () => Array(BS_N).fill(-1));
         let si = 0, vert = false;
-        passScreen(el, P[pi], { sub: '要開始擺放你的船艦了，別讓對手偷看！', onReady: render });
+        if (vsAI()) render(); else passScreen(el, P[pi], { sub: '要開始擺放你的船艦了，別讓對手偷看！', onReady: render });
         function render() {
           const page = h('div', { class: 'pane scroll' });
           const done = si >= BS_SHIPS.length;
@@ -1826,7 +2251,7 @@ defGame({
               h('button', { class: 'btn small', onClick: () => { vert = !vert; Sfx.play('tap'); render(); } }, '⟳ 轉方向'),
               h('button', { class: 'btn small', onClick: () => { const g2 = bsRandom(); if (g2) { for (let r = 0; r < BS_N; r++) grid[r] = g2[r]; si = BS_SHIPS.length; } Sfx.play('flip'); render(); } }, '🎲 隨機擺放'),
               h('button', { class: 'btn small ghost', onClick: () => { for (let r = 0; r < BS_N; r++) grid[r].fill(-1); si = 0; render(); } }, '清空')),
-            h('button', { class: 'btn big primary block', disabled: done ? null : true, onClick: () => { fleets[pi] = grid; if (pi === 0) place(1); else turnOf(0); } }, pi === 0 ? '完成，交給 ' + P[1].name : '完成，開始開戰')));
+            h('button', { class: 'btn big primary block', disabled: done ? null : true, onClick: () => { fleets[pi] = grid; if (pi === 0) { if (P[1].ai) { fleets[1] = bsRandom(); fire(0); } else place(1); } else turnOf(0); } }, pi === 0 && !P[1].ai ? '完成，交給 ' + P[1].name : '完成，開始開戰')));
           el.replaceChildren(page);
         }
       }
@@ -1839,8 +2264,27 @@ defGame({
       function turnOf(pi) {
         passScreen(el, P[pi], { sub: '輪到你開砲了', onReady: () => fire(pi) });
       }
-      function fire(pi) {
-        let fired = false, msg = '點選敵方海域開砲';
+      const coord = (r, c) => `${String.fromCharCode(65 + r)}${c + 1}`;
+      let lastAI = null;
+      function aiShoot() {
+        const sunkCells = new Set();
+        BS_SHIPS.forEach((_, s) => { if (sunk(1, s)) for (let r = 0; r < BS_N; r++) for (let c = 0; c < BS_N; c++) if (fleets[0][r][c] === s) sunkCells.add(r + ',' + c); });
+        const remaining = BS_SHIPS.filter((_, s) => !sunk(1, s));
+        const [r, c] = AI.battleship(shots[1], P[1].lv, sunkCells, remaining);
+        lastAI = r * BS_N + c;
+        let m;
+        if (fleets[0][r][c] >= 0) { shots[1][r][c] = 2; const s = fleets[0][r][c]; m = sunk(1, s) ? `🤖 電腦擊沉了你長度 ${BS_SHIPS[s]} 的船！` : `🤖 電腦打中了你的 ${coord(r, c)}！`; Sfx.play(sunk(1, s) ? 'boom' : 'hit'); }
+        else { shots[1][r][c] = 1; m = `🤖 電腦開砲 ${coord(r, c)}，落空`; Sfx.play('flip'); }
+        if (allSunk(1)) {
+          Night.record(P, { win: [P[1]], lose: [P[0]] });
+          fire(0, m, true);
+          ctx.after(900, () => { Sfx.play('bad'); modal({ title: '電腦獲勝！', body: h('p', { class: 'center' }, '你的艦隊全數被擊沉了 😵'), buttons: [{ text: '再玩一次', cls: 'primary', onClick: () => begin(P) }, { text: '離開', cls: 'ghost', onClick: () => api.exit() }] }); });
+          return;
+        }
+        fire(0, m);
+      }
+      function fire(pi, preMsg, ended) {
+        let fired = !!ended, msg = preMsg || '點選敵方海域開砲';
         render();
         function render() {
           const enemy = fleets[1 - pi];
@@ -1874,12 +2318,13 @@ defGame({
               }
               render();
             }),
-            h('button', { class: 'btn big primary block', disabled: fired ? null : true, onClick: () => turnOf(1 - pi) }, '交給 ' + P[1 - pi].name),
+            h('button', { class: 'btn big primary block', disabled: fired && !ended ? null : true, onClick: () => { if (P[1 - pi].ai) { msg = '電腦瞄準中…'; render(); ctx.after(700, aiShoot); } else turnOf(1 - pi); } }, P[1 - pi].ai ? '🤖 換電腦開砲' : '交給 ' + P[1 - pi].name),
             h('div', { class: 'center muted', style: { fontSize: '14px' } }, `我方艦隊（被擊沉 ${lostCount} 艘）`),
             gridView((r, c) => {
               const mine = fleets[pi][r][c], s = shots[1 - pi][r][c];
-              if (s === 2) return { bg: '#e8483b', t: '✕' };
-              if (s === 1) return { bg: '#16405e', t: '·' };
+              const lastHit = P[1 - pi].ai && lastAI === r * BS_N + c;
+              if (s === 2) return { bg: lastHit ? '#ffc93c' : '#e8483b', t: '✕' };
+              if (s === 1) return { bg: lastHit ? '#2c6f99' : '#16405e', t: '·' };
               return { bg: mine >= 0 ? '#8a94b8' : '#1f5f8a' };
             }, null, true)));
           el.replaceChildren(page);
@@ -1891,7 +2336,7 @@ defGame({
 
 /* ---------- 點格棋 ---------- */
 defGame({
-  id: 'dots', name: '點格棋', icon: '🔲', min: 2, max: 4, order: { '2': 10, '34': 5 },
+  id: 'dots', name: '點格棋', icon: '🔲', min: 2, max: 4, ai: true, order: { '2': 10, '34': 5 },
   desc: '連線圍成方格，格子多的贏',
   rules: '<p>大家輪流在兩個相鄰的點之間連一條線。誰畫下方格的「第四條邊」，那個方格就歸誰，而且<b>可以再畫一條</b>。</p><p>所有格子都被佔滿時，擁有最多格子的人獲勝。小技巧：別輕易畫出方格的第三條邊！</p>',
   start(ctx, el, api) {
@@ -1933,9 +2378,11 @@ defGame({
         turnline.replaceChildren(h('span', { style: { color: P[turn].color } }, P[turn].name), ' 的回合');
       }
       upd();
-      function take(t, r, c) {
+      const aiGo = () => { if (filled < S * S && P[turn].ai) ctx.after(450, () => { if (filled >= S * S || !P[turn].ai) return; const l = AI.dots(S, hl, vl, P[turn].lv); take(l.t, l.r, l.c, true); }); };
+      aiGo();
+      function take(t, r, c, fromAI) {
         const arr = t === 'h' ? hl : vl;
-        if (arr[r][c] >= 0 || filled >= S * S) return;
+        if (arr[r][c] >= 0 || filled >= S * S || (P[turn].ai && !fromAI)) return;
         arr[r][c] = turn;
         const el2 = lineEls[t + r + '_' + c];
         el2.classList.add('taken'); el2.style.setProperty('--lc', P[turn].color);
@@ -1950,7 +2397,7 @@ defGame({
         Sfx.play(got ? 'ok' : 'place');
         if (filled >= S * S) { upd(); finish(); return; }
         if (!got) turn = (turn + 1) % P.length;
-        upd();
+        upd(); aiGo();
       }
       function finish() {
         recordScores(P, sc, null);
@@ -1967,7 +2414,7 @@ defGame({
 /* ---------- 翻牌記憶 ---------- */
 const MEM_EMOJI = ['🐶', '🐱', '🐼', '🦊', '🐸', '🐵', '🦁', '🐯', '🐨', '🐷', '🐙', '🦄', '🐧', '🐢', '🦋', '🍎', '🍉', '🍓', '🍌', '🍕', '🍩', '🌈', '⚽', '🎸', '🚀', '🎈', '⭐', '🌵', '🍄', '🐳'];
 defGame({
-  id: 'memory', name: '翻牌記憶', icon: '🃏', min: 1, max: 4, order: { '2': 11, '34': 4 },
+  id: 'memory', name: '翻牌記憶', icon: '🃏', min: 1, max: 4, ai: true, order: { '2': 11, '34': 4 },
   desc: '翻開兩張相同的牌就得分',
   rules: '<p>所有牌蓋著，輪到你時翻開兩張。如果圖案相同就得 1 分，並且<b>可以繼續翻</b>；不同的話牌會蓋回去，換下一位。</p><p>全部配對完成時分數最高的人獲勝。一個人玩時會記錄步數與時間。</p>',
   start(ctx, el, api) {
@@ -2000,9 +2447,22 @@ defGame({
         turnline.replaceChildren(P.length === 1 ? `步數 ${moves}` : h('span', null, h('span', { style: { color: P[turn].color } }, P[turn].name), ' 翻牌'));
       }
       upd();
-      function flip(i) {
-        if (lock || open.includes(i) || cards[i].classList.contains('done')) return;
+      const aiP = P.find(p => p.ai), known = new Map(), rem = aiP ? AI.memRemember[aiP.lv] : 0;
+      const doneSet = () => new Set(cards.map((c, k) => c.classList.contains('done') ? k : -1).filter(k => k >= 0));
+      const aiGo = () => {
+        if (!P[turn].ai || matched === pairs) return;
+        ctx.after(750, () => {
+          if (lock || !P[turn].ai || open.length) return;
+          const a = AI.memoryPick(deck, doneSet(), known, null);
+          flip(a, true);
+          ctx.after(750, () => { if (!P[turn].ai) return; const k2 = new Map(known); k2.set(a, deck[a]); flip(AI.memoryPick(deck, doneSet(), k2, a), true); });
+        });
+      };
+      aiGo();
+      function flip(i, fromAI) {
+        if (lock || open.includes(i) || cards[i].classList.contains('done') || (P[turn].ai && !fromAI)) return;
         cards[i].classList.add('up'); Sfx.play('flip'); open.push(i);
+        if (aiP && Math.random() < rem) known.set(i, deck[i]);
         if (open.length < 2) return;
         moves++;
         const [a, b] = open;
@@ -2011,11 +2471,11 @@ defGame({
           ctx.after(350, () => {
             [a, b].forEach(k => { cards[k].classList.add('done'); cards[k].style.setProperty('--mc', P[turn].color); });
             sc[turn]++; matched++; open = []; lock = false; Sfx.play('ok'); upd();
-            if (matched === pairs) finish();
+            if (matched === pairs) finish(); else aiGo();
           });
         } else {
           lock = true;
-          ctx.after(900, () => { cards[a].classList.remove('up'); cards[b].classList.remove('up'); open = []; lock = false; turn = (turn + 1) % P.length; upd(); });
+          ctx.after(900, () => { cards[a].classList.remove('up'); cards[b].classList.remove('up'); open = []; lock = false; turn = (turn + 1) % P.length; upd(); aiGo(); });
         }
         upd();
       }
@@ -2041,7 +2501,7 @@ function playerZones(el, n, players) {
   const { root, zones } = makeZones(el, n, players.map(p => p.color));
   const map = n === 2 ? [1, 0] : n === 3 ? [1, 2, 0] : [2, 3, 0, 1];
   const pz = map.map(k => zones[k]);
-  pz.forEach((z, i) => z.style.setProperty('--zc', zoneBg(players[i].color)));
+  pz.forEach((z, i) => { z.style.setProperty('--zc', zoneBg(players[i].color)); if (players[i].ai) z.classList.add('aizone'); });
   return { root, z: pz };
 }
 function duelCountPlayers(n) { return Array.from({ length: n }, (_, i) => ({ name: COLOR_NAMES[i], color: pcolor(i), idx: i })); }
@@ -2077,21 +2537,21 @@ function canvasSetup(ctx, el) {
   return S;
 }
 function drawText(x, txt, X, Y, size, color, rot, font) {
-  x.save(); x.translate(X, Y); if (rot) x.rotate(Math.PI);
+  x.save(); x.translate(X, Y); if (rot && !vsAI()) x.rotate(Math.PI);
   x.fillStyle = color; x.font = `900 ${size}px ${font || 'Bungee, "PingFang TC", sans-serif'}`; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.fillText(txt, 0, 0); x.restore();
 }
 
 /* ---------- 空氣曲棍球 ---------- */
 defGame({
-  id: 'hockey', name: '空氣曲棍球', icon: '🏒', min: 2, max: 2, float: true, order: { '2': 5 },
+  id: 'hockey', name: '空氣曲棍球', icon: '🏒', min: 2, max: 2, float: true, ai: true, order: { '2': 5 },
   desc: '用手指推球拍，把球打進對方球門',
   rules: '<p>手機平放在兩人中間，每人只能在自己的半場移動球拍（用手指拖動）。把冰球打進對方的球門得 1 分，先得 7 分獲勝。</p><p>被進球的一方會在自己的半場發球。左側 ❚❚ 按鈕可以暫停。</p>',
   start(ctx, el) {
     const S = canvasSetup(ctx, el);
     const P = duo(), WIN = 7;
     let R, PR, GOAL;
-    const st = { sc: [0, 0], puck: { x: 0, y: 0, vx: 0, vy: 0 }, pad: [{ x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 }, { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 }], wait: 1.4, msg: '準備', over: false, flash: 0 };
+    const st = App._dbg = { sc: [0, 0], puck: { x: 0, y: 0, vx: 0, vy: 0 }, pad: [{ x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 }, { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 }], wait: 1.4, msg: '準備', over: false, flash: 0 };
     const dims = () => { R = Math.min(S.W, S.H * .62) * .09; PR = R * .62; GOAL = S.W * .38; };
     function reset(serveTo) {
       dims();
@@ -2115,12 +2575,32 @@ defGame({
       return [x, y];
     };
     ctx.on(S.cv, 'pointerdown', e => {
-      const [x, y] = S.pos(e); const i = y > S.H / 2 ? 0 : 1; Haptic.pulse(12);
+      const [x, y] = S.pos(e); const i = (y > S.H / 2 || P[1].ai) ? 0 : 1; Haptic.pulse(12);
       for (const [k, v] of owner) if (v === i) owner.delete(k);
       owner.set(e.pointerId, i);
       [st.pad[i].tx, st.pad[i].ty] = clampPad(i, x, y);
     });
     ctx.on(S.cv, 'pointermove', e => { if (!owner.has(e.pointerId)) return; const i = owner.get(e.pointerId); const [x, y] = S.pos(e); [st.pad[i].tx, st.pad[i].ty] = clampPad(i, x, y); });
+    /* 電腦控制上方球拍 */
+    const AIH = { easy: { spd: 1.5, lag: .22, err: 1.3 }, mid: { spd: 2.4, lag: .12, err: .6 }, hard: { spd: 3.6, lag: .05, err: .2 } }[P[1].lv || 'mid'];
+    let aiT = 0, aiErr = 0;
+    function aiThink(dt) {
+      if (!P[1].ai) return;
+      aiT -= dt; if (aiT > 0) return;
+      aiT = AIH.lag; aiErr = (Math.random() * 2 - 1) * R * AIH.err;
+      const { W, H } = S, p = st.puck, pd = st.pad[1];
+      let tx, ty;
+      if (st.wait > 0 || p.y < -100) { tx = W / 2; ty = H * .13; }
+      else if (p.y < H / 2 + R && (p.vy < H * .4 || p.y < H * .3)) {
+        if (p.y < pd.y - R * .5) { tx = p.x + (p.x < W / 2 ? R * 2.2 : -R * 2.2); ty = p.y; } // 球在背後：繞過去
+        else { tx = p.x + aiErr * .5 + (W / 2 - p.x) * .12; ty = p.y - R * .9; } // 從上方推向對手球門
+      } else {
+        let px = p.x;
+        if (P[1].lv !== 'easy' && p.vy < 0) { const t = (p.y - H * .15) / -p.vy; px = p.x + p.vx * Math.min(t, 1.2); while (px < 0 || px > W) px = px < 0 ? -px : 2 * W - px; }
+        tx = clamp(px, W / 2 - GOAL * .55, W / 2 + GOAL * .55) + aiErr; ty = H * .13;
+      }
+      [pd.tx, pd.ty] = clampPad(1, tx, ty);
+    }
     const up = e => owner.delete(e.pointerId);
     ctx.on(S.cv, 'pointerup', up); ctx.on(S.cv, 'pointercancel', up);
     let hitCd = 0;
@@ -2128,7 +2608,7 @@ defGame({
       const { W, H } = S, p = st.puck;
       for (let i = 0; i < 2; i++) {
         const pd = st.pad[i];
-        const maxMove = H * 5 * dt;
+        const maxMove = H * (P[i].ai ? AIH.spd : 5) * dt;
         let dx = pd.tx - pd.x, dy = pd.ty - pd.y; const d = Math.hypot(dx, dy);
         if (d > maxMove) { dx *= maxMove / d; dy *= maxMove / d; }
         pd.vx = dt > 0 ? dx / dt : 0; pd.vy = dt > 0 ? dy / dt : 0;
@@ -2198,7 +2678,7 @@ defGame({
     ctx.loop(dt => {
       if (st.wait > 0 && !st.over) { st.wait -= dt; if (st.wait <= 0) { st.wait = 0; if (st.serve != null) { reset(st.serve); st.serve = null; } } }
       if (st.flash > 0) st.flash -= dt;
-      physics(dt); draw();
+      aiThink(dt); physics(dt); draw();
     });
     draw();
   }
@@ -2206,7 +2686,7 @@ defGame({
 
 /* ---------- 乒乓對打 ---------- */
 defGame({
-  id: 'pong', name: '乒乓對打', icon: '🏓', min: 2, max: 2, float: true, order: { '2': 6 },
+  id: 'pong', name: '乒乓對打', icon: '🏓', min: 2, max: 2, float: true, ai: true, order: { '2': 6 },
   desc: '左右移動球拍把球擋回去',
   rules: '<p>每人在自己的半場左右滑動手指來移動球拍，把球擋回對方。對方沒接到你就得 1 分，先得 7 分獲勝。</p><p>球打在球拍邊緣會斜飛出去，而且球會越來越快！</p>',
   start(ctx, el) {
@@ -2215,7 +2695,7 @@ defGame({
     const st = { sc: [0, 0], px: [.5, .5], ball: { x: .5, y: .5, vx: 0, vy: 0 }, speed: 0, wait: 1.4, msg: '準備', serve: rand(2), over: false };
     const owner = new Map();
     const setPad = e => { const i = owner.get(e.pointerId); if (i == null) return; st.px[i] = clamp(S.pos(e)[0] / S.W, 0, 1); };
-    ctx.on(S.cv, 'pointerdown', e => { const i = S.pos(e)[1] > S.H / 2 ? 0 : 1; for (const [k, v] of owner) if (v === i) owner.delete(k); owner.set(e.pointerId, i); setPad(e); });
+    ctx.on(S.cv, 'pointerdown', e => { const i = (S.pos(e)[1] > S.H / 2 || P[1].ai) ? 0 : 1; for (const [k, v] of owner) if (v === i) owner.delete(k); owner.set(e.pointerId, i); setPad(e); });
     ctx.on(S.cv, 'pointermove', setPad);
     const up = e => owner.delete(e.pointerId);
     ctx.on(S.cv, 'pointerup', up); ctx.on(S.cv, 'pointercancel', up);
@@ -2230,6 +2710,25 @@ defGame({
     }
     S.onResize = (oW, oH) => { if (oW && oH) { st.ball.x *= S.W / oW; st.ball.y *= S.H / oH; } };
     let started = false;
+    const AIP = { easy: { spd: .85, lag: .2, err: .65 }, mid: { spd: 1.35, lag: .1, err: .32 }, hard: { spd: 2.2, lag: .04, err: .12 } }[P[1].lv || 'mid'];
+    let aiT = 0, aiTarget = .5, aiErr = 0, lastVy = 0;
+    function aiPong(dt) {
+      if (!P[1].ai) return;
+      const g = geo(), b = st.ball;
+      if (Math.sign(b.vy) !== Math.sign(lastVy)) aiErr = (Math.random() * 2 - 1) * AIP.err * (g.pw / 2) / g.W; // 每次來球重新決定誤差
+      lastVy = b.vy;
+      aiT -= dt;
+      if (aiT <= 0) {
+        aiT = AIP.lag;
+        if (started && b.vy < 0) {
+          const t = (b.y - g.y1) / -b.vy; let x = b.x + b.vx * t;
+          const L = g.br, Rr = g.W - g.br; for (let k = 0; k < 6 && (x < L || x > Rr); k++) x = x < L ? 2 * L - x : 2 * Rr - x;
+          aiTarget = x / g.W + aiErr;
+        } else aiTarget = P[1].lv === 'easy' ? st.px[1] : .5;
+      }
+      const d = aiTarget - st.px[1], mv = AIP.spd * dt;
+      st.px[1] = clamp(st.px[1] + clamp(d, -mv, mv), 0, 1);
+    }
     function step(dt) {
       const g = geo(), b = st.ball;
       const N = 4, hh = dt / N;
@@ -2284,14 +2783,14 @@ defGame({
     ctx.loop(dt => {
       if (st.wait > 0) { st.wait -= dt; if (st.wait <= 0 && !st.over) { st.wait = 0; serve(); started = true; } }
       else if (started) step(dt);
-      draw();
+      aiPong(dt); draw();
     });
   }
 });
 
 /* ---------- 拔河 ---------- */
 defGame({
-  id: 'tug', name: '拔河大賽', icon: '🪢', min: 2, max: 2, float: true, order: { '2': 7 },
+  id: 'tug', name: '拔河大賽', icon: '🪢', min: 2, max: 2, float: true, ai: true, order: { '2': 7 },
   desc: '狂點自己的區域，把顏色推過去',
   rules: '<p>倒數結束後，兩人拼命點擊自己那一半的螢幕。每點一下就把分界線往對方推一點，先把對方的顏色完全推出畫面的人獲勝！</p><p>可以用多根手指一起點。倒數前點擊不算。</p>',
   start(ctx, el) {
@@ -2319,8 +2818,12 @@ defGame({
       };
       ctx.after(700, tick);
     }
-    Z.forEach((z, i) => ctx.on(z.z, 'pointerdown', e => {
-      e.preventDefault();
+    if (P[1].ai) top.z.classList.add('aizone');
+    const rate = { easy: 5.2, mid: 7.2, hard: 9.4 }[P[1].lv || 'mid'];
+    let acc = 0;
+    ctx.loop(dt => { if (!P[1].ai || !live || done) return; acc += dt * rate * (0.8 + Math.random() * .4); while (acc >= 1 && live && !done) { acc -= 1; pull(1); } });
+    Z.forEach((z, i) => ctx.on(z.z, 'pointerdown', e => { e.preventDefault(); if (i === 1 && P[1].ai) return; pull(i); }));
+    function pull(i) {
       if (!live || done || ctx.isPaused()) return;
       taps[i]++; pos += i === 0 ? 1 : -1; paint();
       if (taps[i] % 4 === 0) Sfx.play('tick');
@@ -2331,7 +2834,7 @@ defGame({
         Night.record(P, { win: [P[w]], lose: [P[1 - w]] });
         ctx.after(300, () => { Sfx.play('win'); confetti(50); duelOverlay([0, 1].map(k => ({ big: k === w ? '你贏了！' : '你輸了', color: '#fff', sub: `點了 ${taps[k]} 下` })), [{ text: '再來一局', cls: 'primary', onClick: begin }]); });
       }
-    }));
+    }
     begin();
   }
 });
@@ -2352,7 +2855,7 @@ function mathQuestion(level) {
   return { text: `${a} ${op} ${b} = ${shown}`, correct };
 }
 defGame({
-  id: 'math', name: '數學對決', icon: '➗', min: 2, max: 2, float: true, order: { '2': 8 },
+  id: 'math', name: '數學對決', icon: '➗', min: 2, max: 2, float: true, ai: true, order: { '2': 8 },
   desc: '算式對不對？搶先答對得分',
   rules: '<p>兩人同時看到同一題算式，判斷它是「對」還是「錯」。最快答對的人得 1 分；答錯扣 1 分，並且這一題不能再答。</p><p>先得 10 分的人獲勝，題目會越來越難。</p>',
   start(ctx, el) {
@@ -2373,6 +2876,12 @@ defGame({
       q = mathQuestion(level); lock = [false, false]; solved = false;
       parts.forEach(p => { p.qt.textContent = q.text; p.fb.textContent = ''; p.zone.style.setProperty('--zc', zoneBg(P[parts.indexOf(p)].color)); });
       upd();
+      if (P[1].ai) {
+        const L = { easy: [2600, 4000, .74], mid: [1700, 2600, .86], hard: [1000, 1600, .95] }[P[1].lv];
+        const myQ = q;
+        parts[1].fb.textContent = '🤖 思考中…';
+        ctx.after(randInt(L[0], L[1]), () => { if (q !== myQ || solved || lock[1]) return; answer(1, Math.random() < L[2] ? q.correct : !q.correct); });
+      }
     }
     function answer(i, v) {
       if (solved || lock[i] || ctx.isPaused() || !q) return;
@@ -2396,7 +2905,7 @@ defGame({
 
 /* ---------- 反應對決 ---------- */
 defGame({
-  id: 'reaction', name: '反應對決', icon: '⚡', min: 2, max: 4, float: true, order: { '2': 12, '34': 1 },
+  id: 'reaction', name: '反應對決', icon: '⚡', min: 2, max: 4, float: true, ai: true, order: { '2': 12, '34': 1 },
   desc: '畫面變綠瞬間搶按，太早就犯規',
   rules: '<p>每人負責一塊區域。畫面顯示「等待…」時千萬別按，一變成<b style="color:#3fd98a">綠色「按！」</b>就立刻點自己的區域，最快的人得 1 分。</p><p>有時候會出現<b style="color:#ff5468">紅色陷阱</b>，按了就算犯規。犯規的人這一回合出局。先得 5 分獲勝。</p>',
   start(ctx, el, api) {
@@ -2421,13 +2930,14 @@ defGame({
         rc.after(randInt(1600, 4200), () => {
           if (fake) {
             state = 'fake'; setAll('別按！', '#b0233a'); Sfx.play('bad');
+            P.forEach((p, i) => { if (p.ai && Math.random() < { easy: .14, mid: .05, hard: 0 }[p.lv]) rc.after(randInt(250, 450), () => tap(i, true)); });
             rc.after(900, () => { state = 'wait'; parts.forEach((p, i) => { p.zone.style.setProperty('--zc', zoneBg(P[i].color)); p.big.textContent = out[i] ? '犯規出局' : '等待…'; }); rc.after(randInt(900, 2600), go); });
           } else go();
         });
       }
-      function go() { state = 'go'; goT = performance.now(); parts.forEach((p, i) => { if (!out[i]) { p.big.textContent = '按！'; p.zone.style.setProperty('--zc', '#1fb867'); } }); Sfx.play('go'); }
-      function tap(i) {
-        if (ctx.isPaused() || out[i]) return;
+      function go() { state = 'go'; goT = performance.now(); parts.forEach((p, i) => { if (!out[i]) { p.big.textContent = '按！'; p.zone.style.setProperty('--zc', '#1fb867'); } }); Sfx.play('go'); P.forEach((p, i) => { if (p.ai && !out[i]) rc.after(AI.rt(p.lv), () => tap(i, true)); }); }
+      function tap(i, fromAI) {
+        if (ctx.isPaused() || out[i] || (P[i].ai && !fromAI)) return;
         if (state === 'wait' || state === 'fake') {
           out[i] = true; Sfx.play('bad');
           parts[i].big.textContent = '太早了！出局'; parts[i].zone.style.setProperty('--zc', '#4a1520');
@@ -2454,7 +2964,7 @@ defGame({
 
 /* ---------- 狂點大賽 ---------- */
 defGame({
-  id: 'taprace', name: '狂點大賽', icon: '👆', min: 2, max: 4, float: true, order: { '2': 13, '34': 2 },
+  id: 'taprace', name: '狂點大賽', icon: '👆', min: 2, max: 4, float: true, ai: true, order: { '2': 13, '34': 2 },
   desc: '10 秒內誰點得最多次',
   rules: '<p>倒數結束後開始計時 10 秒，每人拼命點擊自己的區域。時間到時點擊次數最多的人獲勝！</p><p>可以用多根手指一起點。</p>',
   start(ctx, el, api) {
@@ -2466,9 +2976,11 @@ defGame({
       const parts = z.map((zone, i) => {
         const big = h('div', { class: 'zbig' }), s = h('div', { class: 'zs' }), bar = h('div', { class: 'tbar', style: { width: '70%' } }, h('i'));
         zone.replaceChildren(big, s, bar);
-        ctx.on(zone, 'pointerdown', e => { e.preventDefault(); if (!live || ctx.isPaused()) return; cnt[i]++; big.textContent = cnt[i]; if (cnt[i] % 5 === 0) Sfx.play('tick'); });
+        ctx.on(zone, 'pointerdown', e => { e.preventDefault(); if (!live || ctx.isPaused() || P[i].ai) return; cnt[i]++; big.textContent = cnt[i]; if (cnt[i] % 5 === 0) Sfx.play('tick'); });
         return { big, s, bar: bar.firstChild };
       });
+      const acc = P.map(() => 0);
+      ctx.loop(dt => { if (!live) return; P.forEach((p, i) => { if (!p.ai) return; acc[i] += dt * { easy: 5.5, mid: 7.5, hard: 9.8 }[p.lv] * (0.85 + Math.random() * .3); while (acc[i] >= 1) { acc[i]--; cnt[i]++; parts[i].big.textContent = cnt[i]; } }); });
       function begin() {
         cnt = P.map(() => 0); live = false;
         parts.forEach((p, i) => { p.big.textContent = '3'; p.s.textContent = P[i].name + ' 準備'; p.bar.style.transform = 'scaleX(1)'; });
@@ -3121,7 +3633,7 @@ defGame({
 
 /* ---------- 終極密碼 ---------- */
 defGame({
-  id: 'code', name: '終極密碼', icon: '🔢', min: 2, max: 20, order: { '2': 14, '34': 11, 'many': 7 },
+  id: 'code', name: '終極密碼', icon: '🔢', min: 2, max: 20, ai: 'luck', order: { '2': 14, '34': 11, 'many': 7 },
   desc: '猜數字縮小範圍，猜中密碼就爆炸',
   rules: `<p>系統會偷偷選一個密碼數字。大家輪流在目前的範圍內猜一個數字，猜完範圍會縮小。</p>
 <p><b>誰猜中密碼誰就輸了！</b>範圍越來越小，壓力越來越大～</p>`,
@@ -3133,6 +3645,14 @@ defGame({
       render();
       function render() {
         const p = P[turn];
+        if (p.ai) {
+          page(el, h('div', { class: 'center muted' }, '密碼在這個範圍內'), h('div', { class: 'range' }, `${lo} ～ ${hi}`),
+            h('div', { class: 'center', style: { fontSize: '20px', fontWeight: '900' } }, '輪到 ', h('span', { style: { color: p.color } }, p.name)),
+            h('div', { class: 'numshow' }, '🤔'), h('div', { class: 'center', style: { minHeight: '24px', color: 'var(--muted)' } }, msg));
+          const myLo = lo, myHi = hi;
+          ctx.after(randInt(900, 1500), () => { if (lo !== myLo || hi !== myHi) return; inp = String(lo === hi ? lo : randInt(lo, hi)); submit(true); });
+          return;
+        }
         const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', '✓'];
         page(el,
           h('div', { class: 'center muted' }, '密碼在這個範圍內'),
@@ -3143,6 +3663,7 @@ defGame({
           h('div', { class: 'keypad' }, keys.map(k => h('button', { style: k === '✓' ? { background: 'var(--accent)', color: 'var(--accent-ink)' } : null, onClick: () => key(k) }, k))));
       }
       function key(k) {
+        if (P[turn].ai) return;
         Sfx.play('tap');
         if (k === '⌫') inp = inp.slice(0, -1);
         else if (k === '✓') return submit();
@@ -3172,7 +3693,7 @@ defGame({
 
 /* ---------- 鱷魚拔牙 ---------- */
 defGame({
-  id: 'croc', name: '鱷魚拔牙', icon: '🐊', min: 2, max: 10, order: { '2': 15, '34': 12, 'many': 8 },
+  id: 'croc', name: '鱷魚拔牙', icon: '🐊', min: 2, max: 10, ai: 'luck', order: { '2': 15, '34': 12, 'many': 8 },
   desc: '輪流按牙齒，按到痛牙就被咬',
   rules: '<p>大家輪流按下一顆鱷魚的牙齒。其中有一顆是「痛牙」，按到它鱷魚就會咬下來，按到的人就輸了！</p><p>每局的痛牙位置都是隨機的。</p>',
   start(ctx, el, api) {
@@ -3200,8 +3721,10 @@ defGame({
       fitBox(ctx, area, box, 1);
       const upd = () => turnEl.replaceChildren('輪到 ', h('span', { style: { color: P[turn].color } }, P[turn].name));
       upd();
-      function press(i) {
-        if (over || teeth[i].classList.contains('down')) return;
+      const aiGo = () => { if (!over && P[turn].ai) ctx.after(randInt(700, 1300), () => { if (over || !P[turn].ai) return; const left = teeth.map((t, k) => t.classList.contains('down') ? -1 : k).filter(k => k >= 0); press(pick(left), true); }); };
+      aiGo();
+      function press(i, fromAI) {
+        if (over || teeth[i].classList.contains('down') || (P[turn].ai && !fromAI)) return;
         teeth[i].classList.add('down');
         teeth[i].style.transform += ' translateY(40%) scaleY(.45)';
         if (i === bad) {
@@ -3214,7 +3737,7 @@ defGame({
           return;
         }
         Sfx.play('place');
-        turn = (turn + 1) % P.length; upd();
+        turn = (turn + 1) % P.length; upd(); aiGo();
       }
     }
   }
@@ -3767,28 +4290,45 @@ defGame({
 const RPS = ['✊', '✌️', '✋'], RPS_N = ['石頭', '剪刀', '布'];
 const rpsWin = (a, b) => a === b ? -1 : ((a === 0 && b === 1) || (a === 1 && b === 2) || (a === 2 && b === 0) ? 0 : 1);
 defGame({
-  id: 'rps', name: '剪刀石頭布', icon: '✌️', min: 2, max: 2, float: true, tags: ['action', 'drink'], order: { '2': 8.5 },
+  id: 'rps', name: '剪刀石頭布', icon: '✌️', min: 2, max: 2, float: true, ai: true, tags: ['action', 'drink'], order: { '2': 8.5 },
   desc: '同時出拳，先贏 5 局',
   rules: '<p>兩人在自己的半邊偷偷選擇出拳（用手遮住別讓對方看到），兩人都選好後同時公布。先贏 5 局的人獲勝！</p>',
   start(ctx, el) {
     const P = duo(), WIN = 5;
     const { z } = playerZones(el, 2, P);
     let sc = [0, 0], pickd = [-1, -1], busy = false;
+    const hist = []; // 你的出拳紀錄 [你出的, 結果]
+    function aiPick() {
+      const lv = P[1].lv, beat = m => [2, 0, 1][m]; // 0 石頭 1 剪刀 2 布：beat(m) = 能贏 m 的拳
+      if (lv === 'easy' || hist.length < 2) return rand(3);
+      if (lv === 'mid') { if (Math.random() < .35) return rand(3); const c = [0, 0, 0]; hist.slice(-8).forEach(h => c[h[0]]++); return beat(c.indexOf(Math.max(...c))); }
+      if (Math.random() < .12) return rand(3);
+      // 高：依你上一拳與輸贏，預測下一拳（馬可夫鏈＋輸了換拳的習慣）
+      const [lm, lr] = hist[hist.length - 1];
+      const c = [.2, .2, .2];
+      for (let k = 1; k < hist.length; k++) if (hist[k - 1][0] === lm && hist[k - 1][1] === lr) c[hist[k][0]] += 1;
+      if (hist.length < 6) { if (lr === 1) c[beat(lm)] += 1; else c[lm] += 1; }
+      return beat(c.indexOf(Math.max(...c)));
+    }
     const parts = z.map((zone, i) => {
       const s = h('div', { class: 'zs' }), big = h('div', { class: 'zt', style: { fontSize: '64px', minHeight: '80px' } }), msg = h('div', { class: 'zs' });
       const btns = h('div', { class: 'row', style: { gap: '12px' } }, RPS.map((e, k) => { const b = h('button', { class: 'btn big', style: { fontSize: '36px', minWidth: '78px', background: 'rgba(0,0,0,.25)' } }, e); ctx.on(b, 'pointerdown', ev => { ev.preventDefault(); choose(i, k); }); return b; }));
       zone.replaceChildren(s, big, msg, btns);
       return { s, big, msg, btns };
     });
-    function reset() { pickd = [-1, -1]; busy = false; parts.forEach((p, i) => { p.big.textContent = '？'; p.msg.textContent = '偷偷出拳'; p.btns.hidden = false; p.s.textContent = `${P[i].name}　${sc[i]} / ${WIN}`; }); }
-    function choose(i, k) {
-      if (busy || pickd[i] >= 0 || ctx.isPaused()) return;
-      pickd[i] = k; Sfx.play('tap'); parts[i].btns.hidden = true; parts[i].big.textContent = '✔'; parts[i].msg.textContent = '已出拳，等對方…';
+    function reset() {
+      pickd = [-1, -1]; busy = false; parts.forEach((p, i) => { p.big.textContent = '？'; p.msg.textContent = '偷偷出拳'; p.btns.hidden = false; p.s.textContent = `${P[i].name}　${sc[i]} / ${WIN}`; });
+      if (P[1].ai) { parts[1].btns.hidden = true; parts[1].msg.textContent = '🤖 思考中…'; const m = aiPick(); ctx.after(randInt(500, 1100), () => choose(1, m, true)); }
+    }
+    function choose(i, k, fromAI) {
+      if (busy || pickd[i] >= 0 || ctx.isPaused() || (P[i].ai && !fromAI)) return;
+      pickd[i] = k; Sfx.play('tap'); parts[i].btns.hidden = true; parts[i].big.textContent = '✔'; parts[i].msg.textContent = P[i].ai ? '電腦已出拳，等你出拳…' : (P[1 - i].ai ? '已出拳！' : '已出拳，等對方…');
       if (pickd[0] >= 0 && pickd[1] >= 0) {
         busy = true; let c = 0; const words = ['剪刀', '石頭', '布！'];
         const tick = () => {
           if (c < 3) { parts.forEach(p => { p.big.textContent = words[c]; p.big.style.fontSize = '44px'; }); Sfx.play('count'); c++; ctx.after(380, tick); return; }
           const w = rpsWin(pickd[0], pickd[1]);
+          hist.push([pickd[0], w === 0 ? 0 : w === 1 ? 1 : 2]);
           parts.forEach((p, j) => { p.big.style.fontSize = '64px'; p.big.textContent = RPS[pickd[j]] + ' vs ' + RPS[pickd[1 - j]]; p.msg.textContent = w < 0 ? '平手，再來！' : (w === j ? '你贏了這局！' : '你輸了這局'); });
           if (w >= 0) sc[w]++;
           Sfx.play(w < 0 ? 'flip' : 'ok');
@@ -3806,7 +4346,7 @@ defGame({
 /* ---------- 顏色陷阱 ---------- */
 const STROOP = [['紅', '#ff4d5e'], ['藍', '#3fa7ff'], ['綠', '#3fd98a'], ['黃', '#ffd23c'], ['紫', '#b77dff']];
 defGame({
-  id: 'stroop', name: '顏色陷阱', icon: '🌈', min: 2, max: 4, float: true, tags: ['action', 'brain'], order: { '2': 12.5, '34': 1.5 },
+  id: 'stroop', name: '顏色陷阱', icon: '🌈', min: 2, max: 4, float: true, ai: true, tags: ['action', 'brain'], order: { '2': 12.5, '34': 1.5 },
   desc: '字的意思和顏色一樣才能按',
   rules: '<p>畫面會不斷出現顏色的字，例如用<b style="color:#3fa7ff">藍色</b>寫的「紅」。只有當<b>字的意思和字的顏色相同</b>時（例如<b style="color:#ff4d5e">紅</b>）才可以搶按自己的區域。</p><p>最快按對的人得 1 分；按錯扣 1 分並且這題不能再按。先得 7 分獲勝！</p>',
   start(ctx, el, api) {
@@ -3831,9 +4371,15 @@ defGame({
         if (!match) while (ci === wi) ci = rand(STROOP.length);
         parts.forEach(p => { p.w.textContent = STROOP[wi][0]; p.w.style.color = STROOP[ci][1]; p.m.textContent = ''; });
         rc.after(match ? 2200 : randInt(900, 1500), () => { if (!done) next(); });
+        P.forEach((p, i) => {
+          if (!p.ai) return;
+          const L = { easy: [820, 1300, .1], mid: [560, 800, .04], hard: [390, 520, .01] }[p.lv];
+          if (match) rc.after(randInt(L[0], L[1]), () => tap(i, true));
+          else if (Math.random() < L[2]) rc.after(randInt(300, 600), () => tap(i, true));
+        });
       }
-      function tap(i) {
-        if (done || lock[i] || ctx.isPaused()) return;
+      function tap(i, fromAI) {
+        if (done || lock[i] || ctx.isPaused() || (P[i].ai && !fromAI)) return;
         if (match) {
           done = true; sc[i]++; Sfx.play('ok'); parts[i].m.textContent = '搶到了 +1'; upd();
           if (sc[i] >= WIN) { rc.destroy(); ctx.after(700, () => zoneResult(ctx, P, sc, '分', () => { sc = P.map(() => 0); upd(); next(); }, api)); return; }
@@ -3851,14 +4397,31 @@ defGame({
 
 /* ---------- 停在 10 秒 ---------- */
 defGame({
-  id: 'tensec', name: '停在10秒', icon: '⏱️', min: 1, max: 20, tags: ['party', 'drink'], order: { '2': 25, '34': 20, 'many': 15 },
+  id: 'tensec', name: '停在10秒', icon: '⏱️', min: 1, max: 20, ai: true, tags: ['party', 'drink'], order: { '2': 25, '34': 20, 'many': 15 },
   desc: '不看碼表，憑感覺停在 10 秒',
   rules: '<p>輪流拿手機按「開始」，碼表在 3 秒後會<b>隱藏</b>，憑感覺在剛好 10.00 秒時按「停！」。</p><p>全部的人玩完後排名，離 10 秒最遠的人接受懲罰；誤差在 0.05 秒內算完美，可以指定一個人接受懲罰！</p>',
   start(ctx, el, api) {
     playerSetup(ctx, el, api, { min: 1, max: 20, options: [PEN_OPT], onStart: (P, o) => game(P, o) });
     function game(P, o) {
       const res = P.map(() => null);
-      passAll(el, P, [...Array(P.length).keys()], (i, next) => passScreen(el, P[i], { sub: '準備好就開始', btn: '我是 ' + P[i].name, onReady: () => run(i, next) }), final);
+      passAll(el, P, [...Array(P.length).keys()], (i, next) => P[i].ai ? aiRun(i, next) : vsAI() ? run(i, next) : passScreen(el, P[i], { sub: '準備好就開始', btn: '我是 ' + P[i].name, onReady: () => run(i, next) }), final);
+      function aiRun(i, next) {
+        const sd = { easy: .75, mid: .32, hard: .1 }[P[i].lv];
+        const g = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+        const target = Math.max(7.5, 10 + g() * sd);
+        const t = h('div', { class: 'bigtime' }, '0.00'), info = h('div', { class: 'center', style: { fontSize: '20px', fontWeight: '800', minHeight: '28px' } }, '🤖 電腦計時中…');
+        el.replaceChildren(h('div', { class: 'pass' }, h('div', { class: 'pass-t', style: { color: P[i].color, fontWeight: '900' } }, P[i].name), t, h('div', { class: 'muted' }, '目標：10.00 秒'), info));
+        let e = 0;
+        const stop = ctx.loop((dt, raw) => {
+          e += Math.min(raw, .25); t.textContent = e < 3 ? e.toFixed(2) : '?.??';
+          if (e >= target) {
+            stop(); res[i] = target; t.textContent = target.toFixed(2);
+            const d = Math.abs(target - 10); Sfx.play('ok');
+            info.textContent = d < .05 ? '完美！🎯' : `誤差 ${d.toFixed(2)} 秒`;
+            info.after(h('button', { class: 'btn big primary', onClick: next }, '看結果'));
+          }
+        });
+      }
       function run(i, next) {
         const t = h('div', { class: 'bigtime' }, '0.00');
         const b = h('button', { class: 'btn big primary', style: { minWidth: '240px', minHeight: '110px', fontSize: '30px', borderRadius: '28px' } }, '開始');
@@ -3997,7 +4560,7 @@ const QUIZ = `台灣最高的山是哪一座？|玉山|雪山|合歡山|阿里�
 六角形有幾個邊？|6 個|5 個|8 個|7 個`.trim().split('\n').map(l => { const [q, ...o] = l.split('|'); return { q, o }; });
 
 defGame({
-  id: 'quiz', name: '知識搶答', icon: '❓', min: 2, max: 4, float: true, tags: ['action', 'brain'], order: { '2': 12.7, '34': 1.7 },
+  id: 'quiz', name: '知識搶答', icon: '❓', min: 2, max: 4, float: true, ai: true, tags: ['action', 'brain'], order: { '2': 12.7, '34': 1.7 },
   desc: '同一題四個選項，最快答對得分',
   rules: '<p>每個人都會在自己的區域看到同一題和四個選項，<b>最快答對</b>的人得 1 分。答錯的人這題不能再答；所有人都答錯或時間到就公布答案。</p><p>先達到目標分數的人獲勝！題目包含常識、地理、自然、台灣與數學。</p>',
   start(ctx, el, api) {
@@ -4021,6 +4584,12 @@ defGame({
         parts.forEach((p, i) => { p.qt.textContent = q.q; p.fb.textContent = ''; p.zone.style.setProperty('--zc', zoneBg(P[i].color)); p.btns.forEach((b, k) => { b.textContent = q.o[order[k]]; b.className = 'qopt'; }); });
         upd();
         rc.countdown(o.sec, (l, r) => parts.forEach(p => p.bar.style.transform = `scaleX(${r})`), () => reveal(-1, '時間到！'));
+        P.forEach((p, i) => {
+          if (!p.ai) return;
+          const L = { easy: [5500, 9000, .55], mid: [3800, 6000, .72], hard: [2400, 4000, .9] }[p.lv];
+          p.ai && (parts[i].fb.textContent = '🤖 思考中…');
+          rc.after(Math.min(randInt(L[0], L[1]), o.sec * 1000 - 300), () => { const right = Math.random() < L[2]; const ks = [0, 1, 2, 3].filter(k => (order[k] === 0) === right); answer(i, pick(ks), true); });
+        });
       }
       function reveal(winner, msg) {
         done = true; rc.destroy();
@@ -4032,8 +4601,8 @@ defGame({
           else next();
         });
       }
-      function answer(i, k) {
-        if (done || lock[i] || ctx.isPaused()) return;
+      function answer(i, k, fromAI) {
+        if (done || lock[i] || ctx.isPaused() || (P[i].ai && !fromAI)) return;
         if (order[k] === 0) {
           sc[i]++; Sfx.play('ok'); upd();
           parts[i].fb.textContent = '答對了 +1'; parts[i].zone.style.setProperty('--zc', '#1f9d5c');
@@ -4055,7 +4624,7 @@ defGame({
 /* ---------- 數7拍手 ---------- */
 function clapNeeded(n, k) { return n % k === 0 || String(n).includes(String(k)); }
 defGame({
-  id: 'count7', name: '數7拍手', icon: '👏', min: 2, max: 20, tags: ['party', 'drink', 'brain'], order: { '2': 26, '34': 21, 'many': 16 },
+  id: 'count7', name: '數7拍手', icon: '👏', min: 2, max: 20, ai: true, tags: ['party', 'drink', 'brain'], order: { '2': 26, '34': 21, 'many': 16 },
   desc: '輪流數數，遇到 7 就要拍手',
   rules: `<p>大家圍成一圈從 1 開始輪流數數。輪到你時，要在時間內按下：</p>
 <ul><li><b>🗣️ 說數字</b>：一般數字，按下並大聲說出來</li><li><b>👏 拍手</b>：數字<b>含有 7</b>（例如 17、27、70）或是<b>7 的倍數</b>（例如 14、21）時</li></ul>
@@ -4083,9 +4652,14 @@ defGame({
         numEl.textContent = o.show === 'yes' ? num : (num === 1 ? '從 1 開始' : '？');
         numEl.style.fontSize = o.show === 'yes' || num !== 1 ? '64px' : '32px';
         rc.countdown(o.sec, (l, r) => bar.firstChild.style.transform = `scaleX(${r})`, () => lose('時間到！'));
+        say.disabled = clap.disabled = !!P[turn].ai;
+        if (P[turn].ai) {
+          const err = { easy: .09, mid: .035, hard: .008 }[P[turn].lv];
+          rc.after(Math.min(randInt(500, 1000), o.sec * 1000 - 250), () => { const right = clapNeeded(num, o.k); act(Math.random() < err ? !right : right, true); });
+        }
       }
-      function act(c) {
-        if (over || ctx.isPaused()) return;
+      function act(c, fromAI) {
+        if (over || ctx.isPaused() || (P[turn].ai && !fromAI)) return;
         if (c === clapNeeded(num, o.k)) { Sfx.play(c ? 'ok' : 'tap'); num++; turn = (turn + 1) % P.length; show(); }
         else lose(c ? `${num} 不用拍手！` : `${num} 要拍手！`);
       }
@@ -4143,7 +4717,7 @@ function dcHasAction(B, col) {
   return B.some((p, i) => p && p.up && p.c === col && dcMoves(B, i).length);
 }
 defGame({
-  id: 'darkchess', name: '暗棋', icon: '🀄', min: 2, max: 2, tags: ['board', 'brain'], order: { '2': 4.5 },
+  id: 'darkchess', name: '暗棋', icon: '🀄', min: 2, max: 2, ai: true, tags: ['board', 'brain'], order: { '2': 4.5 },
   desc: '翻開棋子、以大吃小，台灣經典象棋玩法',
   rules: `<p>32 顆象棋全部蓋著。輪到你時可以<b>翻開一顆棋</b>，或是<b>移動自己的棋子</b>一格（上下左右）。第一個翻棋的人，翻到什麼顏色就是那一方。</p>
 <p><b>吃子：</b>大可以吃小或同級：帥將 &gt; 仕士 &gt; 相象 &gt; 俥車 &gt; 傌馬 &gt; 炮包 &gt; 兵卒。例外：<b>兵卒可以吃帥將，帥將不能吃兵卒</b>。</p>
@@ -4183,15 +4757,25 @@ defGame({
           if (counts[opp] === 0 || !dcHasAction(B, opp)) return finish(1 - turn, counts[opp] === 0 ? '吃光對手的棋子' : '對手無棋可動');
         }
         if (idle >= 40) return finish(-1, '連續 40 步沒有翻棋或吃子');
-        render();
+        render(); aiGo();
+      }
+      function aiGo() {
+        if (over || !P[turn].ai) return;
+        ctx.after(650, () => {
+          if (over || !P[turn].ai) return;
+          const a = AI.darkchess(B, col[turn], P[turn].lv);
+          if (!a) return;
+          if (a.type === 'flip') tap(a.i, true);
+          else { sel = a.from; render(); ctx.after(350, () => { if (!over) tap(a.to, true); }); }
+        });
       }
       function finish(w, why) {
         over = true; render();
         if (w >= 0) { score[w]++; Night.record(P, { win: [P[w]], lose: [P[1 - w]] }); }
         ctx.after(700, () => { Sfx.play(w >= 0 ? 'win' : 'bad'); if (w >= 0) confetti(40); duelOverlay([0, 1].map(k => ({ big: w < 0 ? '和局' : (k === w ? '你贏了！' : '你輸了'), color: k === w ? P[k].color : '#fff', sub: why })), [{ text: '再來一局', cls: 'primary', onClick: () => { first = 1 - first; round(); } }]); });
       }
-      function tap(i) {
-        if (over) return;
+      function tap(i, fromAI) {
+        if (over || (P[turn].ai && !fromAI)) return;
         const p = B[i];
         if (sel >= 0) {
           const t = dcMoves(B, sel).find(t => t.i === i);
@@ -4212,7 +4796,7 @@ defGame({
         if (col[turn] && p.c === col[turn]) { if (dcMoves(B, i).length) { sel = i; Sfx.play('tap'); } else toast('這顆棋現在不能移動'); }
         render();
       }
-      render();
+      render(); aiGo();
     }
     round();
   }
